@@ -75,6 +75,35 @@ describe("Tests the slot logic", () => {
     ).toHaveLength(11);
   });
 
+  it("aligns minimum-notice slots to the interval when optimized slots are enabled", () => {
+    const originalSystemTime = dayjs.utc().toDate();
+    vi.setSystemTime(dayjs.utc("2021-06-20T13:32:00Z").toDate());
+
+    try {
+      const slots = getSlots({
+        showOptimizedSlots: true,
+        inviteeDate: dayjs.utc("2021-06-20"),
+        frequency: 30,
+        minimumBookingNotice: 360,
+        eventLength: 20,
+        dateRanges: [
+          {
+            start: dayjs.utc("2021-06-20T00:00:00Z"),
+            end: dayjs.utc("2021-06-20T23:33:00Z"),
+          },
+        ],
+      });
+
+      expect(slots.slice(0, 3).map((slot) => slot.time.format("HH:mm"))).toStrictEqual([
+        "20:00",
+        "20:30",
+        "21:00",
+      ]);
+    } finally {
+      vi.setSystemTime(originalSystemTime);
+    }
+  });
+
   it("shows correct time slots for 20 minutes long events with working hours that do not end at a full hour ", async () => {
     // 72 20-minutes events in a 24h day
     const result = getSlots({

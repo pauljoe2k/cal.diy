@@ -1,3 +1,4 @@
+import process from "node:process";
 import type { Dayjs } from "@calcom/dayjs";
 import dayjs from "@calcom/dayjs";
 import type {
@@ -125,9 +126,11 @@ function buildSlotsWithDateRanges({
   const slotBoundaries = new Map<number, true>();
 
   orderedDateRanges.forEach((range) => {
-    let slotStartTime = range.start.utc().isAfter(startTimeWithMinNotice)
-      ? range.start
-      : startTimeWithMinNotice;
+    const minimumNoticeDeterminesStart = !range.start.utc().isAfter(startTimeWithMinNotice);
+    let slotStartTime = range.start;
+    if (minimumNoticeDeterminesStart) {
+      slotStartTime = startTimeWithMinNotice;
+    }
 
     // For current day bookings, normalizing the seconds to zero to avoid issues with time calculations
     slotStartTime = slotStartTime.set("second", 0).set("millisecond", 0);
@@ -138,8 +141,13 @@ function buildSlotsWithDateRanges({
     slotStartTime = slotStartTime.tz(timeZone);
 
     if (slotStartTime.minute() % interval !== 0) {
+      let shouldOptimizeSlotStart = showOptimizedSlots;
+      if (minimumNoticeDeterminesStart) {
+        shouldOptimizeSlotStart = false;
+      }
+
       slotStartTime = getCorrectedSlotStartTime({
-        showOptimizedSlots,
+        showOptimizedSlots: shouldOptimizeSlotStart,
         interval,
         slotStartTime,
         range,
@@ -184,7 +192,7 @@ function buildSlotsWithDateRanges({
 
       slotBoundaries.set(slotStartTime.valueOf(), true);
 
-      let dateOutOfOfficeExists = undefined;
+      let dateOutOfOfficeExists;
       if (datesOutOfOffice) {
         const slotDateYYYYMMDD = datesOutOfOfficeTimeZone
           ? slotStartTime.tz(datesOutOfOfficeTimeZone).format("YYYY-MM-DD")
