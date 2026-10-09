@@ -64,4 +64,20 @@ describe("userAdminRouter.add", () => {
       },
     });
   });
+
+  it("returns validation errors for both duplicate fields", async () => {
+    const caller = createCaller(vi.fn().mockResolvedValueOnce({ id: 2 }).mockResolvedValueOnce({ id: 3 }));
+
+    await expect(
+      caller.add({ ...baseInput, email: "existing@example.com", username: "existing-user" })
+    ).rejects.toMatchObject({
+      message: "Invalid input",
+      cause: {
+        issues: expect.arrayContaining([
+          expect.objectContaining({ path: ["email"], message: "email_already_used" }),
+          expect.objectContaining({ path: ["username"], message: "username_already_taken" }),
+        ]),
+      },
+    });
+  });
 });
