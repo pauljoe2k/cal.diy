@@ -51,4 +51,17 @@ describe("userAdminRouter.add", () => {
       },
     });
   });
+
+  it("returns a field validation error when the username already exists", async () => {
+    const caller = createCaller(vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 3 }));
+
+    await expect(caller.add({ ...baseInput, username: "existing-user" })).rejects.toMatchObject({
+      message: "Invalid input",
+      cause: {
+        issues: expect.arrayContaining([
+          expect.objectContaining({ path: ["username"], message: "username_already_taken" }),
+        ]),
+      },
+    });
+  });
 });
