@@ -105,7 +105,37 @@ export const userAdminRouter = router({
       throwDuplicateUserError(duplicateFields);
     }
 
-    const user = await prisma.user.create({ data: { ...input, creationSource: CreationSource.WEBAPP } });
+    const user = await (async () => {
+      try {
+        return await prisma.user.create({ data: { ...input, creationSource: CreationSource.WEBAPP } });
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
+          throw error;
+        }
+
+        const target = error.meta?.target;
+        let fieldsFromTarget: DuplicateUserField[] = [];
+        if (Array.isArray(target)) {
+          fieldsFromTarget = duplicateUserFields.filter((field) =>
+            target.some((targetField) => targetField.toLowerCase().includes(field))
+          );
+        } else if (typeof target === "string") {
+          fieldsFromTarget = duplicateUserFields.filter((field) => target.toLowerCase().includes(field));
+        }
+
+        if (fieldsFromTarget.length > 0) {
+          throwDuplicateUserError(fieldsFromTarget);
+        }
+
+        const usersAfterConflict = await prisma.user.findMany({ where, select });
+        const fieldsAfterConflict = getDuplicateUserFields(usersAfterConflict, input);
+        if (fieldsAfterConflict.length > 0) {
+          throwDuplicateUserError(fieldsAfterConflict);
+        }
+
+        throw error;
+      }
+    })();
     return { user, message: `User with id: ${user.id} added successfully` };
   }),
   update: authedAdminProcedureWithRequestedUser

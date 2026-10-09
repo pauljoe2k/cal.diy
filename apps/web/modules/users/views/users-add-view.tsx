@@ -7,6 +7,26 @@ import { usePathname, useRouter } from "next/navigation";
 import type { FormValues } from "../components/UserForm";
 import { UserForm } from "../components/UserForm";
 
+type DuplicateUserValidationMessage = "email_already_used" | "username_already_taken";
+
+function isDuplicateUserValidationMessage(value: unknown): value is DuplicateUserValidationMessage {
+  return value === "email_already_used" || value === "username_already_taken";
+}
+
+function getDuplicateUserValidationMessage(data: unknown): DuplicateUserValidationMessage | undefined {
+  if (typeof data !== "object" || data === null || !("zodError" in data)) return;
+  const zodError = data.zodError;
+  if (typeof zodError !== "object" || zodError === null || !("fieldErrors" in zodError)) return;
+  const fieldErrors = zodError.fieldErrors;
+  if (typeof fieldErrors !== "object" || fieldErrors === null) return;
+
+  for (const messages of Object.values(fieldErrors)) {
+    if (!Array.isArray(messages)) continue;
+    const message = messages.find(isDuplicateUserValidationMessage);
+    if (message) return message;
+  }
+}
+
 export default function UsersAddView() {
   const { t } = useLocale();
   const pathname = usePathname();
@@ -23,7 +43,8 @@ export default function UsersAddView() {
     },
     onError: (err) => {
       console.error(err.message);
-      showToast(t("error_adding_user"), "error");
+      const duplicateMessage = getDuplicateUserValidationMessage(err.data);
+      showToast(t(duplicateMessage ?? "error_adding_user"), "error");
     },
   });
 
