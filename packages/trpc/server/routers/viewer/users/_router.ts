@@ -1,4 +1,5 @@
 import { WEBAPP_URL } from "@calcom/lib/constants";
+import { Prisma } from "@calcom/prisma/client";
 import { CreationSource, RedirectType } from "@calcom/prisma/enums";
 import { UserSchema } from "@calcom/prisma/zod/modelSchema/UserSchema";
 import { authedAdminProcedure } from "@calcom/trpc/server/procedures/authedProcedure";
@@ -31,32 +32,33 @@ const userBodySchema = UserSchema.pick({
   avatarUrl: true,
 });
 
-function throwDuplicateEmailError(): never {
+const duplicateUserFields = ["email", "username"] as const;
+type DuplicateUserField = (typeof duplicateUserFields)[number];
+type UserIdentifiers = Pick<z.infer<typeof userBodySchema>, DuplicateUserField>;
+
+const duplicateUserMessages: Record<DuplicateUserField, string> = {
+  email: "email_already_used",
+  username: "username_already_taken",
+};
+
+function throwDuplicateUserError(fields: DuplicateUserField[]): never {
   throw new TRPCError({
     code: "BAD_REQUEST",
     message: "Invalid input",
-    cause: new z.ZodError([
-      {
+    cause: new z.ZodError(
+      fields.map((field) => ({
         code: z.ZodIssueCode.custom,
-        path: ["email"],
-        message: "email_already_used",
-      },
-    ]),
+        path: [field],
+        message: duplicateUserMessages[field],
+      }))
+    ),
   });
 }
 
-function throwDuplicateUsernameError(): never {
-  throw new TRPCError({
-    code: "BAD_REQUEST",
-    message: "Invalid input",
-    cause: new z.ZodError([
-      {
-        code: z.ZodIssueCode.custom,
-        path: ["username"],
-        message: "username_already_taken",
-      },
-    ]),
-  });
+function getDuplicateUserFields(existingUsers: UserIdentifiers[], input: UserIdentifiers): DuplicateUserField[] {
+  return duplicateUserFields.filter(
+    (field) => input[field] && existingUsers.some((existingUser) => existingUser[field] === input[field])
+  );
 }
 
 /** Reusable logic that checks for admin permissions and if the requested user exists */
@@ -90,18 +92,17 @@ export const userAdminRouter = router({
   }),
   add: authedAdminProcedure.input(userBodySchema).mutation(async ({ ctx, input }) => {
     const { prisma } = ctx;
-    const existingEmail = await prisma.user.findUnique({
-      where: { email: input.email },
-      select: { id: true },
-    });
-    if (existingEmail) throwDuplicateEmailError();
-
+    const where: Prisma.UserWhereInput = { OR: [{ email: input.email }] };
     if (input.username) {
-      const existingUsername = await prisma.user.findUnique({
-        where: { username: input.username },
-        select: { id: true },
-      });
-      if (existingUsername) throwDuplicateUsernameError();
+      where.OR?.push({ username: input.username });
+    }
+    const existingUsers = await prisma.user.findMany({
+      where,
+      select: { email: true, username: true },
+    });
+    const duplicateFields = getDuplicateUserFields(existingUsers, input);
+    if (duplicateFields.length > 0) {
+      throwDuplicateUserError(duplicateFields);
     }
 
     const user = await prisma.user.create({ data: { ...input, creationSource: CreationSource.WEBAPP } });

@@ -28,11 +28,11 @@ const baseInput = {
   avatarUrl: null,
 };
 
-const createCaller = (findUnique: ReturnType<typeof vi.fn>) =>
+const createCaller = (findMany: ReturnType<typeof vi.fn>) =>
   callerFactory({
     prisma: {
       user: {
-        findUnique,
+        findMany,
         create: vi.fn().mockResolvedValue({ id: 1 }),
       },
     },
@@ -40,7 +40,9 @@ const createCaller = (findUnique: ReturnType<typeof vi.fn>) =>
 
 describe("userAdminRouter.add", () => {
   it("returns a field validation error when the email already exists", async () => {
-    const caller = createCaller(vi.fn().mockResolvedValue({ id: 2 }));
+    const caller = createCaller(
+      vi.fn().mockResolvedValue([{ email: "existing@example.com", username: null }])
+    );
 
     await expect(caller.add({ ...baseInput, email: "existing@example.com" })).rejects.toMatchObject({
       message: "Invalid input",
@@ -53,7 +55,9 @@ describe("userAdminRouter.add", () => {
   });
 
   it("returns a field validation error when the username already exists", async () => {
-    const caller = createCaller(vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 3 }));
+    const caller = createCaller(
+      vi.fn().mockResolvedValue([{ email: "other@example.com", username: "existing-user" }])
+    );
 
     await expect(caller.add({ ...baseInput, username: "existing-user" })).rejects.toMatchObject({
       message: "Invalid input",
@@ -66,7 +70,9 @@ describe("userAdminRouter.add", () => {
   });
 
   it("returns validation errors for both duplicate fields", async () => {
-    const caller = createCaller(vi.fn().mockResolvedValueOnce({ id: 2 }).mockResolvedValueOnce({ id: 3 }));
+    const caller = createCaller(
+      vi.fn().mockResolvedValue([{ email: "existing@example.com", username: "existing-user" }])
+    );
 
     await expect(
       caller.add({ ...baseInput, email: "existing@example.com", username: "existing-user" })
