@@ -28,11 +28,11 @@ const baseInput = {
   avatarUrl: null,
 };
 
-const createCaller = (findMany: ReturnType<typeof vi.fn>) =>
+const createCaller = (findUnique: ReturnType<typeof vi.fn>) =>
   callerFactory({
     prisma: {
       user: {
-        findMany,
+        findUnique,
         create: vi.fn().mockResolvedValue({ id: 1 }),
       },
     },
@@ -40,9 +40,7 @@ const createCaller = (findMany: ReturnType<typeof vi.fn>) =>
 
 describe("userAdminRouter.add", () => {
   it("returns a field validation error when the email already exists", async () => {
-    const caller = createCaller(
-      vi.fn().mockResolvedValue([{ email: "existing@example.com", username: null }])
-    );
+    const caller = createCaller(vi.fn().mockResolvedValue({ id: 2 }));
 
     await expect(caller.add({ ...baseInput, email: "existing@example.com" })).rejects.toMatchObject({
       message: "Invalid input",

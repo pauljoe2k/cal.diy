@@ -31,6 +31,20 @@ const userBodySchema = UserSchema.pick({
   avatarUrl: true,
 });
 
+function throwDuplicateEmailError(): never {
+  throw new TRPCError({
+    code: "BAD_REQUEST",
+    message: "Invalid input",
+    cause: new z.ZodError([
+      {
+        code: z.ZodIssueCode.custom,
+        path: ["email"],
+        message: "email_already_used",
+      },
+    ]),
+  });
+}
+
 /** Reusable logic that checks for admin permissions and if the requested user exists */
 //const authedAdminWithUserMiddleware = middleware();
 
@@ -62,6 +76,12 @@ export const userAdminRouter = router({
   }),
   add: authedAdminProcedure.input(userBodySchema).mutation(async ({ ctx, input }) => {
     const { prisma } = ctx;
+    const existingEmail = await prisma.user.findUnique({
+      where: { email: input.email },
+      select: { id: true },
+    });
+    if (existingEmail) throwDuplicateEmailError();
+
     const user = await prisma.user.create({ data: { ...input, creationSource: CreationSource.WEBAPP } });
     return { user, message: `User with id: ${user.id} added successfully` };
   }),
