@@ -45,6 +45,20 @@ function throwDuplicateEmailError(): never {
   });
 }
 
+function throwDuplicateUsernameError(): never {
+  throw new TRPCError({
+    code: "BAD_REQUEST",
+    message: "Invalid input",
+    cause: new z.ZodError([
+      {
+        code: z.ZodIssueCode.custom,
+        path: ["username"],
+        message: "username_already_taken",
+      },
+    ]),
+  });
+}
+
 /** Reusable logic that checks for admin permissions and if the requested user exists */
 //const authedAdminWithUserMiddleware = middleware();
 
@@ -81,6 +95,14 @@ export const userAdminRouter = router({
       select: { id: true },
     });
     if (existingEmail) throwDuplicateEmailError();
+
+    if (input.username) {
+      const existingUsername = await prisma.user.findUnique({
+        where: { username: input.username },
+        select: { id: true },
+      });
+      if (existingUsername) throwDuplicateUsernameError();
+    }
 
     const user = await prisma.user.create({ data: { ...input, creationSource: CreationSource.WEBAPP } });
     return { user, message: `User with id: ${user.id} added successfully` };
