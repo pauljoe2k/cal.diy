@@ -1,3 +1,4 @@
+import { Prisma } from "@calcom/prisma/client";
 import { createCallerFactory } from "@calcom/trpc/server/trpc";
 import { describe, expect, it, vi } from "vitest";
 import { userAdminRouter } from "./_router";
@@ -28,12 +29,15 @@ const baseInput = {
   avatarUrl: null,
 };
 
-const createCaller = (findMany: ReturnType<typeof vi.fn>) =>
+const createCaller = (
+  findMany: ReturnType<typeof vi.fn>,
+  create = vi.fn().mockResolvedValue({ id: 1 })
+) =>
   callerFactory({
     prisma: {
       user: {
         findMany,
-        create: vi.fn().mockResolvedValue({ id: 1 }),
+        create,
       },
     },
   } as unknown as Parameters<typeof callerFactory>[0]);
@@ -82,6 +86,28 @@ describe("userAdminRouter.add", () => {
         issues: expect.arrayContaining([
           expect.objectContaining({ path: ["email"], message: "email_already_used" }),
           expect.objectContaining({ path: ["username"], message: "username_already_taken" }),
+        ]),
+      },
+    });
+  });
+
+  it("returns a validation error for a unique-constraint race", async () => {
+    const caller = createCaller(
+      vi.fn().mockResolvedValue([]),
+      vi.fn().mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+          code: "P2002",
+          clientVersion: "mockedVersion",
+          meta: { target: ["email"] },
+        })
+      )
+    );
+
+    await expect(caller.add(baseInput)).rejects.toMatchObject({
+      message: "Invalid input",
+      cause: {
+        issues: expect.arrayContaining([
+          expect.objectContaining({ path: ["email"], message: "email_already_used" }),
         ]),
       },
     });
